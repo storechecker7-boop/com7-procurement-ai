@@ -142,9 +142,6 @@ if search_btn or st.session_state.trigger_search:
             [
                 {{
                     "name": "ชื่อบริษัท",
-                    "unit": "ราคา/ชิ้น (ถ้าไม่มีข้อมูลจริงให้ใส่ 'N/A')",
-                    "pack": "ราคา/แพ็ค (ถ้าไม่มีข้อมูลจริงให้ใส่ 'N/A')",
-                    "box": "ราคา/ลัง (ถ้าไม่มีข้อมูลจริงให้ใส่ 'N/A')",
                     "hours": "เวลาเปิด-ปิด (เช่น จ.-ศ. 08:30-17:30)",
                     "address": "ที่อยู่เต็ม",
                     "email": "อีเมล (ถ้าไม่มีให้ใส่ 'N/A')",
@@ -194,9 +191,6 @@ if search_btn or st.session_state.trigger_search:
 
                         row_data = {
                             "ชื่อซัพพลายเออร์": row.get('name'),
-                            "ราคา/ชิ้น": row.get('unit'),
-                            "ราคา/แพ็ค": row.get('pack'),
-                            "ราคา/ลัง": row.get('box'),
                             "เวลาเปิด-ปิด": row.get('hours'),
                             "แผนที่นำทาง": maps_url,
                             "อีเมล": row.get('email', 'N/A'),
@@ -206,12 +200,6 @@ if search_btn or st.session_state.trigger_search:
                         final_rows.append(row_data)
 
                     df = pd.DataFrame(final_rows)
-
-                    # ซ่อนคอลัมน์ราคาถ้าข้อมูลเป็น N/A ทั้งหมด
-                    cols_to_check = ["ราคา/ชิ้น", "ราคา/แพ็ค", "ราคา/ลัง"]
-                    for col in cols_to_check:
-                        if col in df.columns and (df[col] == "N/A").all():
-                            df = df.drop(columns=[col])
 
                     st.markdown(f"### ✅ ผลลัพธ์สำหรับ: {product_name} (พบ {len(df)} รายการ)")
                     st.dataframe(
