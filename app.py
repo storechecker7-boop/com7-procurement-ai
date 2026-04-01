@@ -2,7 +2,6 @@ import streamlit as st
 import google.generativeai as genai
 import pandas as pd
 import json
-import urllib.parse
 import re
 
 # ==========================================
@@ -136,17 +135,17 @@ if search_btn or st.session_state.trigger_search:
         # แสดงสถานะการโหลดแบบไม่มีการหน่วงเวลา
         with st.spinner(f"กำลังวิเคราะห์และค้นหาซัพพลายเออร์สำหรับ '{product_name}'... (ใช้เวลาประมาณ 5-15 วินาที)"):
             
+            # ปรับ Prompt ใหม่ให้ดึงเฉพาะที่มีอีเมล และไม่ต้องดึงข้อมูลเว็บไซต์/ที่อยู่มาให้เสียเวลาประมวลผล
             prompt = f"""
             ค้นหาบริษัท B2B ในไทยที่ขาย '{product_name}' ให้ได้จำนวนมากที่สุดเท่าที่คุณจะสามารถประมวลผลได้ (เป้าหมาย 30-50 แห่งขึ้นไป) (ห้ามบริษัทค้าปลีกเด็ดขาด)
+            เลือกมาเฉพาะบริษัทที่มีข้อมูล 'อีเมล' สำหรับติดต่อเท่านั้น ถ้าไม่มีให้ข้ามไปเลย
             ส่งกลับมาเป็นข้อมูลรูปแบบ JSON Array เท่านั้น ตามโครงสร้างด้านล่าง:
             [
                 {{
                     "name": "ชื่อบริษัท",
                     "hours": "เวลาเปิด-ปิด (เช่น จ.-ศ. 08:30-17:30)",
-                    "address": "ที่อยู่เต็ม",
-                    "email": "อีเมล (ถ้าไม่มีให้ใส่ 'N/A')",
-                    "phone": "เบอร์โทรศัพท์ (ถ้าไม่มีให้ใส่ 'N/A')",
-                    "website": "URL เว็บไซต์แบบเต็ม (ต้องขึ้นต้นด้วย http:// หรือ https:// ถ้าไม่มีให้ใส่ 'N/A')"
+                    "email": "อีเมล",
+                    "phone": "เบอร์โทรศัพท์ (ถ้าไม่มีให้ใส่ 'N/A')"
                 }}
             ]
             """
@@ -171,46 +170,38 @@ if search_btn or st.session_state.trigger_search:
                         data = []
 
                 if not data:
-                    st.info(f"ไม่พบข้อมูลซัพพลายเออร์ B2B สำหรับ '{product_name}' หรือระบบคืนค่าผิดพลาด กรุณาลองปรับคำค้นหาใหม่")
+                    st.info(f"ไม่พบข้อมูลซัพพลายเออร์ B2B ที่มีอีเมลติดต่อสำหรับ '{product_name}' หรือระบบคืนค่าผิดพลาด กรุณาลองปรับคำค้นหาใหม่")
                 else:
                     df_raw = pd.DataFrame(data)
                     
                     final_rows = []
                     for _, row in df_raw.iterrows():
-                        addr = row.get('address', '')
-                        # แปลงที่อยู่เป็นลิงก์ Google Maps นำทางจาก Com7
-                        maps_url = f"https://www.google.com/maps/dir/{urllib.parse.quote('บริษัท คอมเซเว่น บางนา')}/{urllib.parse.quote(str(addr))}"
+                        email = str(row.get('email', '')).strip()
                         
-                        web = row.get('website', 'N/A')
-                        if pd.isna(web) or web == 'N/A' or web == '-' or web == '':
-                            web_url = None
-                        else:
-                            web_url = str(web)
-                            if not web_url.startswith('http'):
-                                web_url = 'https://' + web_url
+                        # กรองเอาเฉพาะรายการที่มีอีเมล (ตัด N/A, -, หรือค่าว่างทิ้ง)
+                        if email.upper() == 'N/A' or email == '-' or email == '' or email.lower() == 'nan':
+                            continue
 
                         row_data = {
-                            "ชื่อซัพพลายเออร์": row.get('name'),
-                            "เวลาเปิด-ปิด": row.get('hours'),
-                            "แผนที่นำทาง": maps_url,
-                            "อีเมล": row.get('email', 'N/A'),
-                            "เบอร์โทรศัพท์": row.get('phone', 'N/A'),
-                            "เว็บไซต์": web_url
+                            "ชื่อซัพพลายเออร์": row.get('name', 'N/A'),
+                            "เวลาเปิด-ปิด": row.get('hours', 'N/A'),
+                            "อีเมล": email,
+                            "เบอร์โทรศัพท์": row.get('phone', 'N/A')
                         }
                         final_rows.append(row_data)
 
-                    df = pd.DataFrame(final_rows)
+                    # ถ้าคัดกรองแล้วไม่เหลือใครเลย
+                    if not final_rows:
+                        st.warning(f"ค้นพบข้อมูลบริษัท แต่ไม่มีบริษัทไหนที่มีข้อมูลอีเมลติดต่อเลยสำหรับ '{product_name}'")
+                    else:
+                        df = pd.DataFrame(final_rows)
 
-                    st.markdown(f"### ✅ ผลลัพธ์สำหรับ: {product_name} (พบ {len(df)} รายการ)")
-                    st.dataframe(
-                        df,
-                        column_config={
-                            "แผนที่นำทาง": st.column_config.LinkColumn("📍 ดูเส้นทาง (Com7)", display_text="เปิด Google Maps"),
-                            "เว็บไซต์": st.column_config.LinkColumn("🌐 เว็บไซต์", display_text="เข้าสู่เว็บไซต์")
-                        },
-                        hide_index=True,
-                        use_container_width=True
-                    )
+                        st.markdown(f"### ✅ ผลลัพธ์สำหรับ: {product_name} (พบ {len(df)} รายการที่ระบุอีเมล)")
+                        st.dataframe(
+                            df,
+                            hide_index=True,
+                            use_container_width=True
+                        )
                     
             except Exception as e:
                 st.error(f"เกิดข้อผิดพลาดในการดึงข้อมูล: {e}")
