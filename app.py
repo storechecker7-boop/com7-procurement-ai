@@ -10,27 +10,20 @@ import re
 GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
 genai.configure(api_key=GEMINI_API_KEY)
 
-# ล้าง Cache ทุก 3600 วินาที (1 ชั่วโมง) เพื่อประหยัดโควต้าหากมีคนค้นหาคำเดิม
 @st.cache_data(ttl=3600)
 def get_ai_response(prompt, model_name):
     model = genai.GenerativeModel(model_name)
-    # บังคับให้ AI ตอบกลับมาเป็นโครงสร้าง JSON ทันที (ช่วยให้เร็วขึ้นและไม่ต้องดักจับข้อความขยะ)
     return model.generate_content(
         prompt,
         generation_config={"response_mime_type": "application/json"}
     )
 
-# บังคับเลือกรุ่น 1.5-flash เป็นอันดับแรกเพื่อดึงโควต้า 1500 ครั้ง/วัน และประมวลผลเร็วที่สุด
 @st.cache_resource
 def get_available_model():
     try:
         available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-        
-        # ค้นหา 1.5-flash ก่อนเสมอ
         for m in available_models:
             if '1.5-flash' in m: return m
-            
-        # ถ้าไม่มี ให้ไล่หารุ่นอื่นสำรอง
         for target in ['1.5', '2.0', '2.5', 'pro']:
             for m in available_models:
                 if target in m: return m
@@ -45,7 +38,6 @@ SELECTED_MODEL = get_available_model()
 # ==========================================
 @st.cache_resource
 def get_global_quota():
-    # สร้าง Dictionary ส่วนกลางเพื่อแชร์ให้ทุก Session
     return {"used": 0, "limit": 1500}
 
 app_quota = get_global_quota()
@@ -57,17 +49,61 @@ st.set_page_config(page_title="SPECIFICATION COM7", layout="centered", page_icon
 
 st.markdown("""
     <style>
-    .main-title { text-align: center; color: #7CB342; font-size: 2.8rem; font-weight: 800; margin-bottom: 0; }
-    .sub-title { text-align: center; color: #666; font-size: 1rem; margin-bottom: 15px; }
-    .quota-box { text-align: center; background-color: #f1f8e9; color: #33691E; padding: 8px; border-radius: 20px; font-weight: bold; font-size: 0.9rem; margin-bottom: 25px; border: 1px solid #c5e1a5; display: inline-block; width: 100%;}
-    .history-box { background-color: #ffffff; border: 2px solid #7CB342; border-radius: 8px; padding: 15px; margin-bottom: 20px; text-align: center; color: #666;}
-    .stButton>button { background-color: #7CB342 !important; color: white !important; border-radius: 25px; border: none; }
-    .stProgress > div > div > div > div { background-color: #7CB342 !important; } /* Com7 Green Bar */
+    /* ตั้งค่าฟอนต์และการแสดงผลให้ดูมินิมอลและเรียบหรูขึ้น */
+    @import url('https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600&display=swap');
+    
+    html, body, [class*="css"]  {
+        font-family: 'Kanit', sans-serif;
+    }
+    
+    .main-title { text-align: center; color: #7CB342; font-size: 2.8rem; font-weight: 600; margin-bottom: 0; letter-spacing: 1px;}
+    .sub-title { text-align: center; color: #888; font-size: 0.95rem; margin-bottom: 25px; font-weight: 300; }
+    .quota-box { text-align: center; background-color: #f1f8e9; color: #558b2f; padding: 6px 15px; border-radius: 20px; font-weight: 400; font-size: 0.85rem; margin-bottom: 30px; border: 1px solid #dcedc8; display: inline-block; width: 100%;}
+    .history-box { background-color: #f9f9f9; border: 1px dashed #ccc; border-radius: 8px; padding: 15px; margin-bottom: 20px; text-align: center; color: #999; font-size: 0.9rem;}
+    
+    /* ปุ่มค้นหา */
+    .stButton>button { background-color: #7CB342 !important; color: white !important; border-radius: 8px; border: none; font-weight: 500; padding: 10px 24px; transition: all 0.3s ease;}
+    .stButton>button:hover { background-color: #689f38 !important; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+    
+    /* หัวข้อผลลัพธ์แบบเรียบหรู */
+    .result-header {
+        font-size: 1.25rem;
+        font-weight: 500;
+        color: #2e7d32;
+        padding-bottom: 10px;
+        border-bottom: 1px solid #e0e0e0;
+        margin-top: 30px;
+        margin-bottom: 15px;
+    }
+    .result-count {
+        font-size: 0.9rem;
+        font-weight: 300;
+        color: #777;
+        margin-left: 8px;
+    }
+    
+    /* สถานะโหลดแบบคลีนๆ */
+    .clean-loading {
+        text-align: center;
+        color: #7CB342;
+        font-size: 0.95rem;
+        font-weight: 400;
+        padding: 20px;
+        background-color: #f1f8e9;
+        border-radius: 8px;
+        margin-top: 15px;
+        animation: pulse 1.5s infinite;
+    }
+    @keyframes pulse {
+        0% { opacity: 0.6; }
+        50% { opacity: 1; }
+        100% { opacity: 0.6; }
+    }
     </style>
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 4. จัดการ Session State (ค้นหา & ประวัติ)
+# 4. จัดการ Session State
 # ==========================================
 if 'search_history' not in st.session_state:
     st.session_state.search_history = []
@@ -83,18 +119,12 @@ def click_history(term):
 # Header & Quota Display
 st.markdown("<div class='main-title'>COIII7</div>", unsafe_allow_html=True)
 st.markdown("<div class='sub-title'>SPECIFICATION COM7 | B2B PROCUREMENT AGENT</div>", unsafe_allow_html=True)
-
-# แสดงโควต้าการใช้งานแบบ Real-time ที่แชร์ร่วมกัน
 st.markdown(f"<div class='quota-box'>📊 โควต้าการค้นหารวมของระบบวันนี้: {app_quota['used']} / {app_quota['limit']} ครั้ง</div>", unsafe_allow_html=True)
 
-# ส่วน Search History แบบคลิกได้ (แสดงล่าสุดก่อน สูงสุด 10 รายการ)
-st.markdown("**ประวัติการค้นหาล่าสุด (Search History)**")
+st.markdown("**ประวัติการค้นหาล่าสุด**")
 with st.container():
     if st.session_state.search_history:
-        # กลับด้านลิสต์ให้ล่าสุดอยู่ซ้ายมือสุด และตัดให้ไม่เกิน 10
         history_list = list(reversed(st.session_state.search_history[-10:]))
-        
-        # จัดเรียงปุ่มแถวละ 5 ปุ่มเพื่อความสวยงาม
         for i in range(0, len(history_list), 5):
             cols = st.columns(5)
             for j in range(5):
@@ -104,7 +134,6 @@ with st.container():
     else:
         st.markdown("<div class='history-box'>ยังไม่มีประวัติการค้นหา</div>", unsafe_allow_html=True)
 
-# ช่องค้นหาหลัก
 product_name = st.text_input("ระบุชื่อสินค้าที่ต้องการค้นหา", value=st.session_state.search_query, placeholder="เช่น ปลั๊กไฟ 3 ตา, จอมอนิเตอร์, สาย HDMI ราคาถูก")
 search_btn = st.button("ค้นหาซัพพลายเออร์", use_container_width=True)
 
@@ -119,94 +148,88 @@ if search_btn or st.session_state.trigger_search:
         st.warning("กรุณากรอกชื่อสินค้า")
         st.session_state.trigger_search = False
     else:
-        # อัปเดต Global Quota
         app_quota['used'] += 1
-
-        # รีเซ็ต Trigger หลังจากกดเริ่ม
         st.session_state.trigger_search = False
         st.session_state.search_query = product_name
         
-        # อัปเดต History 
         if product_name in st.session_state.search_history:
             st.session_state.search_history.remove(product_name)
         st.session_state.search_history.append(product_name)
         st.session_state.search_history = st.session_state.search_history[-10:]
         
-        # แสดงสถานะการโหลดแบบไม่มีการหน่วงเวลา
-        with st.spinner(f"กำลังวิเคราะห์และค้นหาซัพพลายเออร์สำหรับ '{product_name}'... (ใช้เวลาประมาณ 5-15 วินาที)"):
+        # กล่องโหลดข้อความแบบเรียบหรู (จะถูกลบทิ้งเมื่อโหลดเสร็จ)
+        loading_placeholder = st.empty()
+        loading_placeholder.markdown(f"<div class='clean-loading'>⏳ กำลังรวบรวมข้อมูลซัพพลายเออร์สำหรับ '{product_name}'...</div>", unsafe_allow_html=True)
             
-            # ปรับ Prompt ใหม่ให้ดึงเฉพาะที่มีอีเมล และไม่ต้องดึงข้อมูลเว็บไซต์/ที่อยู่มาให้เสียเวลาประมวลผล
-            prompt = f"""
-            ค้นหาบริษัท B2B ในไทยที่ขาย '{product_name}' ให้ได้จำนวนมากที่สุดเท่าที่คุณจะสามารถประมวลผลได้ (เป้าหมาย 30-50 แห่งขึ้นไป) (ห้ามบริษัทค้าปลีกเด็ดขาด)
-            เลือกมาเฉพาะบริษัทที่มีข้อมูล 'อีเมล' สำหรับติดต่อเท่านั้น ถ้าไม่มีให้ข้ามไปเลย
-            ส่งกลับมาเป็นข้อมูลรูปแบบ JSON Array เท่านั้น ตามโครงสร้างด้านล่าง:
-            [
-                {{
-                    "name": "ชื่อบริษัท",
-                    "hours": "เวลาเปิด-ปิด (เช่น จ.-ศ. 08:30-17:30)",
-                    "email": "อีเมล",
-                    "phone": "เบอร์โทรศัพท์ (ถ้าไม่มีให้ใส่ 'N/A')"
-                }}
-            ]
-            """
+        prompt = f"""
+        ค้นหาบริษัท B2B ในไทยที่ขาย '{product_name}' ให้ได้จำนวนมากที่สุดเท่าที่คุณจะสามารถประมวลผลได้ (เป้าหมาย 30-50 แห่งขึ้นไป) (ห้ามบริษัทค้าปลีกเด็ดขาด)
+        เลือกมาเฉพาะบริษัทที่มีข้อมูล 'อีเมล' สำหรับติดต่อเท่านั้น ถ้าไม่มีให้ข้ามไปเลย
+        ส่งกลับมาเป็นข้อมูลรูปแบบ JSON Array เท่านั้น ตามโครงสร้างด้านล่าง:
+        [
+            {{
+                "name": "ชื่อบริษัท",
+                "hours": "เวลาเปิด-ปิด (เช่น จ.-ศ. 08:30-17:30)",
+                "email": "อีเมล",
+                "phone": "เบอร์โทรศัพท์ (ถ้าไม่มีให้ใส่ 'N/A')"
+            }}
+        ]
+        """
 
+        try:
+            response = get_ai_response(prompt, SELECTED_MODEL)
+            
             try:
-                # เรียกใช้งาน AI 
-                response = get_ai_response(prompt, SELECTED_MODEL)
-                
-                # โหลดข้อมูล JSON จาก AI กลับมาเป็น List ทันที
-                try:
-                    data = json.loads(response.text)
-                except json.JSONDecodeError:
-                    # กรณีสุดวิสัย AI ส่ง JSON มาไม่สมบูรณ์ พยายามซ่อมแซม
-                    match = re.search(r'\[.*\]', response.text, re.DOTALL)
-                    if match:
-                        fixed_json_str = match.group(0).rsplit('}', 1)[0] + '}]'
-                        try:
-                            data = json.loads(fixed_json_str)
-                        except:
-                            data = []
-                    else:
+                data = json.loads(response.text)
+            except json.JSONDecodeError:
+                match = re.search(r'\[.*\]', response.text, re.DOTALL)
+                if match:
+                    fixed_json_str = match.group(0).rsplit('}', 1)[0] + '}]'
+                    try:
+                        data = json.loads(fixed_json_str)
+                    except:
                         data = []
-
-                if not data:
-                    st.info(f"ไม่พบข้อมูลซัพพลายเออร์ B2B ที่มีอีเมลติดต่อสำหรับ '{product_name}' หรือระบบคืนค่าผิดพลาด กรุณาลองปรับคำค้นหาใหม่")
                 else:
-                    df_raw = pd.DataFrame(data)
-                    
-                    final_rows = []
-                    for _, row in df_raw.iterrows():
-                        email = str(row.get('email', '')).strip()
-                        
-                        # กรองเอาเฉพาะรายการที่มีอีเมล (ตัด N/A, -, หรือค่าว่างทิ้ง)
-                        if email.upper() == 'N/A' or email == '-' or email == '' or email.lower() == 'nan':
-                            continue
+                    data = []
 
-                        row_data = {
-                            "ชื่อซัพพลายเออร์": row.get('name', 'N/A'),
-                            "เวลาเปิด-ปิด": row.get('hours', 'N/A'),
-                            "อีเมล": email,
-                            "เบอร์โทรศัพท์": row.get('phone', 'N/A')
-                        }
-                        final_rows.append(row_data)
+            # ลบกล่องโหลดทิ้งเมื่อประมวลผลเสร็จ
+            loading_placeholder.empty()
 
-                    # ถ้าคัดกรองแล้วไม่เหลือใครเลย
-                    if not final_rows:
-                        st.warning(f"ค้นพบข้อมูลบริษัท แต่ไม่มีบริษัทไหนที่มีข้อมูลอีเมลติดต่อเลยสำหรับ '{product_name}'")
-                    else:
-                        df = pd.DataFrame(final_rows)
+            if not data:
+                st.info(f"ไม่พบข้อมูลซัพพลายเออร์ B2B ที่มีอีเมลติดต่อสำหรับ '{product_name}' หรือระบบคืนค่าผิดพลาด กรุณาลองปรับคำค้นหาใหม่")
+            else:
+                df_raw = pd.DataFrame(data)
+                
+                final_rows = []
+                for _, row in df_raw.iterrows():
+                    email = str(row.get('email', '')).strip()
+                    if email.upper() == 'N/A' or email == '-' or email == '' or email.lower() == 'nan':
+                        continue
 
-                        st.markdown(f"### ✅ ผลลัพธ์สำหรับ: {product_name} (พบ {len(df)} รายการที่ระบุอีเมล)")
-                        st.dataframe(
-                            df,
-                            hide_index=True,
-                            use_container_width=True
-                        )
-                    
-            except Exception as e:
-                st.error(f"เกิดข้อผิดพลาดในการดึงข้อมูล: {e}")
-                # ถ้าเกิด Error ให้คืนโควต้าให้ระบบ 1 ครั้ง
-                app_quota['used'] = max(0, app_quota['used'] - 1)
+                    row_data = {
+                        "ชื่อซัพพลายเออร์": row.get('name', 'N/A'),
+                        "เวลาเปิด-ปิด": row.get('hours', 'N/A'),
+                        "อีเมล": email,
+                        "เบอร์โทรศัพท์": row.get('phone', 'N/A')
+                    }
+                    final_rows.append(row_data)
+
+                if not final_rows:
+                    st.warning(f"ค้นพบข้อมูลบริษัท แต่ไม่มีบริษัทไหนที่มีข้อมูลอีเมลติดต่อเลยสำหรับ '{product_name}'")
+                else:
+                    df = pd.DataFrame(final_rows)
+
+                    # แสดงผลหัวข้อแบบเรียบหรูและเล็กลง
+                    st.markdown(f"<div class='result-header'>✅ ผลลัพธ์สำหรับ: {product_name} <span class='result-count'>(พบ {len(df)} รายการที่ระบุอีเมล)</span></div>", unsafe_allow_html=True)
+                    st.dataframe(
+                        df,
+                        hide_index=True,
+                        use_container_width=True
+                    )
+                
+        except Exception as e:
+            loading_placeholder.empty()
+            st.error(f"เกิดข้อผิดพลาดในการดึงข้อมูล: {e}")
+            app_quota['used'] = max(0, app_quota['used'] - 1)
 
 st.markdown("---")
 st.caption(f"⚙️ System Engine: {SELECTED_MODEL} (Auto-reset every 1 hour)")
