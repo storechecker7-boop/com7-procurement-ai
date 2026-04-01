@@ -9,7 +9,7 @@ import time
 # ==========================================
 # 1. ตั้งค่าระบบและจัดการ Cache
 # ==========================================
-GEMINI_API_KEY = "AIzaSyCc6tdpK_xcO32KTZHtyGctKOifaYFJoRk" 
+GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
 genai.configure(api_key=GEMINI_API_KEY)
 
 # ล้าง Cache ทุก 3600 วินาที (1 ชั่วโมง) เพื่อประหยัดโควต้าหากมีคนค้นหาคำเดิม
