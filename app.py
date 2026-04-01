@@ -4,7 +4,6 @@ import pandas as pd
 import json
 import urllib.parse
 import re
-import time
 
 # ==========================================
 # 1. ตั้งค่าระบบและจัดการ Cache
@@ -16,9 +15,13 @@ genai.configure(api_key=GEMINI_API_KEY)
 @st.cache_data(ttl=3600)
 def get_ai_response(prompt, model_name):
     model = genai.GenerativeModel(model_name)
-    return model.generate_content(prompt)
+    # บังคับให้ AI ตอบกลับมาเป็นโครงสร้าง JSON ทันที (ช่วยให้เร็วขึ้นและไม่ต้องดักจับข้อความขยะ)
+    return model.generate_content(
+        prompt,
+        generation_config={"response_mime_type": "application/json"}
+    )
 
-# บังคับเลือกรุ่น 1.5-flash เป็นอันดับแรกเพื่อดึงโควต้า 1500 ครั้ง/วัน
+# บังคับเลือกรุ่น 1.5-flash เป็นอันดับแรกเพื่อดึงโควต้า 1500 ครั้ง/วัน และประมวลผลเร็วที่สุด
 @st.cache_resource
 def get_available_model():
     try:
@@ -117,7 +120,7 @@ if search_btn or st.session_state.trigger_search:
         st.warning("กรุณากรอกชื่อสินค้า")
         st.session_state.trigger_search = False
     else:
-        # อัปเดต Global Quota (นับทุกครั้งที่มีการรันค้นหา)
+        # อัปเดต Global Quota
         app_quota['used'] += 1
 
         # รีเซ็ต Trigger หลังจากกดเริ่ม
@@ -130,110 +133,101 @@ if search_btn or st.session_state.trigger_search:
         st.session_state.search_history.append(product_name)
         st.session_state.search_history = st.session_state.search_history[-10:]
         
-        # หลอดโหลดสีเขียว Com7
-        progress_bar = st.progress(0)
-        status_text = st.empty()
-        
-        for i in range(1, 101, 10):
-            time.sleep(0.05) 
-            progress_bar.progress(i)
-            status_text.text(f"กำลังรวบรวมข้อมูลซัพพลายเออร์... {i}%")
-
-        prompt = f"""
-        ค้นหาบริษัท B2B ในไทยที่ขาย '{product_name}' ให้ได้จำนวนมากที่สุดเท่าที่คุณจะสามารถประมวลผลได้ใน 1 ครั้ง (เป้าหมาย 30-50 แห่งขึ้นไป) (ห้ามค้าปลีกเด็ดขาด)
-        ข้อควรระวังสำคัญ: คุณต้องตอบเป็นรูปแบบ JSON Array ที่สมบูรณ์แบบเท่านั้น หากข้อมูลยาวเกินไป ให้หยุดที่จำนวนที่คุณสามารถปิดวงเล็บ ] ได้ทัน ห้ามส่งข้อมูลที่ขาดหายกลางคัน
-        หากไม่เจอหรือเป็นสินค้าไม่มีจริงให้ตอบ []
-        โครงสร้าง JSON:
-        [
-            {{
-                "name": "ชื่อบริษัท",
-                "unit": "ราคา/ชิ้น (ถ้าไม่มีข้อมูลจริงให้ใส่ 'N/A')",
-                "pack": "ราคา/แพ็ค (ถ้าไม่มีข้อมูลจริงให้ใส่ 'N/A')",
-                "box": "ราคา/ลัง (ถ้าไม่มีข้อมูลจริงให้ใส่ 'N/A')",
-                "hours": "เวลาเปิด-ปิด (เช่น จ.-ศ. 08:30-17:30)",
-                "address": "ที่อยู่เต็ม",
-                "phone": "เบอร์โทรศัพท์ (ถ้าไม่มีให้ใส่ 'N/A')",
-                "website": "URL เว็บไซต์แบบเต็ม (ต้องขึ้นต้นด้วย http:// หรือ https:// ถ้าไม่มีให้ใส่ 'N/A')"
-            }}
-        ]
-        """
-
-        try:
-            response = get_ai_response(prompt, SELECTED_MODEL)
-            match = re.search(r'\[.*\]', response.text, re.DOTALL)
+        # แสดงสถานะการโหลดแบบไม่มีการหน่วงเวลา
+        with st.spinner(f"กำลังวิเคราะห์และค้นหาซัพพลายเออร์สำหรับ '{product_name}'... (ใช้เวลาประมาณ 5-15 วินาที)"):
             
-            if match:
+            prompt = f"""
+            ค้นหาบริษัท B2B ในไทยที่ขาย '{product_name}' ให้ได้จำนวนมากที่สุดเท่าที่คุณจะสามารถประมวลผลได้ (เป้าหมาย 30-50 แห่งขึ้นไป) (ห้ามบริษัทค้าปลีกเด็ดขาด)
+            ส่งกลับมาเป็นข้อมูลรูปแบบ JSON Array เท่านั้น ตามโครงสร้างด้านล่าง:
+            [
+                {{
+                    "name": "ชื่อบริษัท",
+                    "unit": "ราคา/ชิ้น (ถ้าไม่มีข้อมูลจริงให้ใส่ 'N/A')",
+                    "pack": "ราคา/แพ็ค (ถ้าไม่มีข้อมูลจริงให้ใส่ 'N/A')",
+                    "box": "ราคา/ลัง (ถ้าไม่มีข้อมูลจริงให้ใส่ 'N/A')",
+                    "hours": "เวลาเปิด-ปิด (เช่น จ.-ศ. 08:30-17:30)",
+                    "address": "ที่อยู่เต็ม",
+                    "email": "อีเมล (ถ้าไม่มีให้ใส่ 'N/A')",
+                    "phone": "เบอร์โทรศัพท์ (ถ้าไม่มีให้ใส่ 'N/A')",
+                    "website": "URL เว็บไซต์แบบเต็ม (ต้องขึ้นต้นด้วย http:// หรือ https:// ถ้าไม่มีให้ใส่ 'N/A')"
+                }}
+            ]
+            """
+
+            try:
+                # เรียกใช้งาน AI 
+                response = get_ai_response(prompt, SELECTED_MODEL)
+                
+                # โหลดข้อมูล JSON จาก AI กลับมาเป็น List ทันที
                 try:
-                    data = json.loads(match.group(0))
+                    data = json.loads(response.text)
                 except json.JSONDecodeError:
-                    fixed_json_str = match.group(0).rsplit('}', 1)[0] + '}]'
-                    try:
-                        data = json.loads(fixed_json_str)
-                    except:
-                        data = []
-                        st.warning("⚠️ ข้อมูลมีขนาดใหญ่เกินไป ทำให้บางส่วนสูญหาย กรุณาลองค้นหาให้แคบลง")
-            else:
-                data = []
-
-            progress_bar.progress(100)
-            status_text.empty()
-
-            if not data:
-                st.info(f"ไม่พบข้อมูลซัพพลายเออร์ B2B สำหรับ '{product_name}' หรือรูปแบบข้อมูลไม่ถูกต้อง")
-            else:
-                df_raw = pd.DataFrame(data)
-                
-                final_rows = []
-                for _, row in df_raw.iterrows():
-                    addr = row.get('address', '')
-                    maps_url = f"https://www.google.com/maps/dir/{urllib.parse.quote('บริษัท คอมเซเว่น บางนา')}/{urllib.parse.quote(addr)}"
-                    
-                    web = row.get('website', 'N/A')
-                    if pd.isna(web) or web == 'N/A' or web == '-' or web == '':
-                        web_url = None
+                    # กรณีสุดวิสัย AI ส่ง JSON มาไม่สมบูรณ์ พยายามซ่อมแซม
+                    match = re.search(r'\[.*\]', response.text, re.DOTALL)
+                    if match:
+                        fixed_json_str = match.group(0).rsplit('}', 1)[0] + '}]'
+                        try:
+                            data = json.loads(fixed_json_str)
+                        except:
+                            data = []
                     else:
-                        web_url = str(web)
-                        if not web_url.startswith('http'):
-                            web_url = 'https://' + web_url
+                        data = []
 
-                    row_data = {
-                        "ชื่อซัพพลายเออร์": row.get('name'),
-                        "ราคา/ชิ้น": row.get('unit'),
-                        "ราคา/แพ็ค": row.get('pack'),
-                        "ราคา/ลัง": row.get('box'),
-                        "เวลาเปิด-ปิด": row.get('hours'),
-                        "แผนที่นำทาง": maps_url,
-                        "เบอร์โทรศัพท์": row.get('phone'),
-                        "เว็บไซต์": web_url
-                    }
-                    final_rows.append(row_data)
+                if not data:
+                    st.info(f"ไม่พบข้อมูลซัพพลายเออร์ B2B สำหรับ '{product_name}' หรือระบบคืนค่าผิดพลาด กรุณาลองปรับคำค้นหาใหม่")
+                else:
+                    df_raw = pd.DataFrame(data)
+                    
+                    final_rows = []
+                    for _, row in df_raw.iterrows():
+                        addr = row.get('address', '')
+                        # แปลงที่อยู่เป็นลิงก์ Google Maps นำทางจาก Com7
+                        maps_url = f"https://www.google.com/maps/dir/{urllib.parse.quote('บริษัท คอมเซเว่น บางนา')}/{urllib.parse.quote(str(addr))}"
+                        
+                        web = row.get('website', 'N/A')
+                        if pd.isna(web) or web == 'N/A' or web == '-' or web == '':
+                            web_url = None
+                        else:
+                            web_url = str(web)
+                            if not web_url.startswith('http'):
+                                web_url = 'https://' + web_url
 
-                df = pd.DataFrame(final_rows)
+                        row_data = {
+                            "ชื่อซัพพลายเออร์": row.get('name'),
+                            "ราคา/ชิ้น": row.get('unit'),
+                            "ราคา/แพ็ค": row.get('pack'),
+                            "ราคา/ลัง": row.get('box'),
+                            "เวลาเปิด-ปิด": row.get('hours'),
+                            "แผนที่นำทาง": maps_url,
+                            "อีเมล": row.get('email', 'N/A'),
+                            "เบอร์โทรศัพท์": row.get('phone', 'N/A'),
+                            "เว็บไซต์": web_url
+                        }
+                        final_rows.append(row_data)
 
-                cols_to_check = ["ราคา/ชิ้น", "ราคา/แพ็ค", "ราคา/ลัง"]
-                for col in cols_to_check:
-                    if col in df.columns and (df[col] == "N/A").all():
-                        df = df.drop(columns=[col])
+                    df = pd.DataFrame(final_rows)
 
-                st.markdown(f"### ✅ ผลลัพธ์สำหรับ: {product_name} (พบ {len(df)} รายการ)")
-                st.dataframe(
-                    df,
-                    column_config={
-                        "แผนที่นำทาง": st.column_config.LinkColumn("📍 ดูเส้นทาง (Com7)", display_text="เปิด Google Maps"),
-                        "เว็บไซต์": st.column_config.LinkColumn("🌐 เว็บไซต์", display_text="เข้าสู่เว็บไซต์")
-                    },
-                    hide_index=True,
-                    use_container_width=True
-                )
-                
-                # รีเฟรชหน้าเบาๆ เพื่ออัปเดตตัวเลขโควต้าให้ผู้ใช้คนอื่นเห็นทันที (ถ้าจำเป็น)
-                # st.rerun() 
+                    # ซ่อนคอลัมน์ราคาถ้าข้อมูลเป็น N/A ทั้งหมด
+                    cols_to_check = ["ราคา/ชิ้น", "ราคา/แพ็ค", "ราคา/ลัง"]
+                    for col in cols_to_check:
+                        if col in df.columns and (df[col] == "N/A").all():
+                            df = df.drop(columns=[col])
 
-        except Exception as e:
-            st.error(f"เกิดข้อผิดพลาดในการดึงข้อมูล: {e}")
-            # ถ้าเกิด Error แล้วอยากคืนโควต้าให้ระบบ
-            app_quota['used'] = max(0, app_quota['used'] - 1)
-            progress_bar.empty()
+                    st.markdown(f"### ✅ ผลลัพธ์สำหรับ: {product_name} (พบ {len(df)} รายการ)")
+                    st.dataframe(
+                        df,
+                        column_config={
+                            "แผนที่นำทาง": st.column_config.LinkColumn("📍 ดูเส้นทาง (Com7)", display_text="เปิด Google Maps"),
+                            "เว็บไซต์": st.column_config.LinkColumn("🌐 เว็บไซต์", display_text="เข้าสู่เว็บไซต์")
+                        },
+                        hide_index=True,
+                        use_container_width=True
+                    )
+                    
+            except Exception as e:
+                st.error(f"เกิดข้อผิดพลาดในการดึงข้อมูล: {e}")
+                # ถ้าเกิด Error ให้คืนโควต้าให้ระบบ 1 ครั้ง
+                app_quota['used'] = max(0, app_quota['used'] - 1)
 
 st.markdown("---")
 st.caption(f"⚙️ System Engine: {SELECTED_MODEL} (Auto-reset every 1 hour)")
