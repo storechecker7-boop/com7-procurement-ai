@@ -27,6 +27,11 @@ def get_available_model():
 
 SELECTED_MODEL = get_available_model()
 st.sidebar.write("Model ที่ใช้:", SELECTED_MODEL)
+try:
+    all_models = [m.name for m in client.models.list()]
+    st.sidebar.write("Models ทั้งหมด:", all_models)
+except Exception as e:
+    st.sidebar.write("List error:", e)
 
 # ==========================================
 # 2. ระบบ Global Quota Tracker (นับรวมทุกคน)
