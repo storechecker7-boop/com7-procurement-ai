@@ -20,7 +20,7 @@ def get_ai_response(prompt, model_name):
 
 @st.cache_resource
 def get_available_model():
-    return "gemini-1.5-flash"
+    return "models/gemini-1.5-flash"
 
 SELECTED_MODEL = get_available_model()
 
