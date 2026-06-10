@@ -20,14 +20,7 @@ def get_ai_response(prompt, model_name):
 
 @st.cache_resource
 def get_available_model():
-    try:
-        available_models = [m.name for m in genai.list_models() 
-                           if 'generateContent' in m.supported_generation_methods]
-        for m in available_models:
-            if '1.5-flash' in m: return m
-        ...
-    except:
-        return "models/gemini-1.5-flash"
+    return "gemini-1.5-flash"
 
 SELECTED_MODEL = get_available_model()
 
