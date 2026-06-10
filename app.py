@@ -1,6 +1,5 @@
 import streamlit as st
 from google import genai
-from google.genai import types
 import pandas as pd
 import json
 import re
@@ -13,25 +12,42 @@ client = genai.Client(
     http_options={"api_version": "v1beta"}
 )
 
-@st.cache_data(ttl=3600)
-def get_ai_response(prompt, model_name):
-    response = client.models.generate_content(
-        model=model_name,
-        contents=prompt
-    )
-    return response.text
+MODELS_ROTATION = [
+    "models/gemini-2.0-flash-lite",
+    "models/gemini-2.0-flash",
+    "models/gemini-flash-lite-latest",
+    "models/gemini-flash-latest",
+    "models/gemini-2.5-flash",
+]
 
 @st.cache_resource
-def get_available_model():
-    return "gemini-1.5-flash"
+def get_model_state():
+    return {"current": 0}
 
-SELECTED_MODEL = get_available_model()
-st.sidebar.write("Model ที่ใช้:", SELECTED_MODEL)
-try:
-    all_models = [m.name for m in client.models.list()]
-    st.sidebar.write("Models ทั้งหมด:", all_models)
-except Exception as e:
-    st.sidebar.write("List error:", e)
+model_state = get_model_state()
+
+def get_current_model():
+    return MODELS_ROTATION[model_state["current"] % len(MODELS_ROTATION)]
+
+def rotate_model():
+    model_state["current"] = (model_state["current"] + 1) % len(MODELS_ROTATION)
+
+def call_ai(prompt):
+    for _ in range(len(MODELS_ROTATION)):
+        try:
+            response = client.models.generate_content(
+                model=get_current_model(),
+                contents=prompt
+            )
+            return response.text, get_current_model()
+        except Exception as e:
+            error_msg = str(e)
+            if "429" in error_msg or "quota" in error_msg.lower() or "503" in error_msg or "unavailable" in error_msg.lower():
+                rotate_model()
+                continue
+            else:
+                raise e
+    raise Exception("ทุก model หมด quota แล้ว กรุณาลองใหม่พรุ่งนี้")
 
 # ==========================================
 # 2. ระบบ Global Quota Tracker (นับรวมทุกคน)
@@ -136,7 +152,7 @@ if search_btn or st.session_state.trigger_search:
         """
 
         try:
-            response_text = get_ai_response(prompt, SELECTED_MODEL)
+            response_text, used_model = call_ai(prompt)
 
             try:
                 data = json.loads(response_text)
@@ -182,4 +198,4 @@ if search_btn or st.session_state.trigger_search:
             app_quota['used'] = max(0, app_quota['used'] - 1)
 
 st.markdown("---")
-st.caption(f"⚙️ System Engine: {SELECTED_MODEL} (Auto-reset every 1 hour)")
+st.caption(f"⚙️ System Engine: {get_current_model()} (Auto-rotation enabled)")
