@@ -17,10 +17,7 @@ client = genai.Client(
 def get_ai_response(prompt, model_name):
     response = client.models.generate_content(
         model=model_name,
-        contents=prompt,
-        config=types.GenerateContentConfig(
-            response_mime_type="application/json"
-        )
+        contents=prompt
     )
     return response.text
 
