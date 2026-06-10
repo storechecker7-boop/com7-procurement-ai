@@ -8,7 +8,7 @@ import re
 # 1. ตั้งค่าระบบและจัดการ Cache
 # ==========================================
 GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
-genai.configure(api_key=GEMINI_API_KEY)
+genai.configure(api_key=GEMINI_API_KEY, transport="rest")
 
 @st.cache_data(ttl=3600)
 def get_ai_response(prompt, model_name):
@@ -20,7 +20,7 @@ def get_ai_response(prompt, model_name):
 
 @st.cache_resource
 def get_available_model():
-    return "gemini-1.5-flash-002"
+    return "gemini-1.5-flash"
 
 SELECTED_MODEL = get_available_model()
 
