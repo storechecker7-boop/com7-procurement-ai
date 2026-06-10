@@ -23,9 +23,17 @@ def get_ai_response(prompt, model_name):
 
 @st.cache_resource
 def get_available_model():
-    return "gemini-1.5-flash"
+    try:
+        models = client.models.list()
+        for m in models:
+            if 'flash' in m.name.lower() and 'preview' not in m.name.lower():
+                return m.name
+        return list(models)[0].name
+    except:
+        return "gemini-2.0-flash"
 
 SELECTED_MODEL = get_available_model()
+st.sidebar.write("Model ที่ใช้:", SELECTED_MODEL)
 
 # ==========================================
 # 2. ระบบ Global Quota Tracker (นับรวมทุกคน)
