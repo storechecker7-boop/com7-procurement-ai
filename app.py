@@ -20,7 +20,23 @@ def get_ai_response(prompt, model_name):
 
 @st.cache_resource
 def get_available_model():
-    return "models/gemini-1.5-flash"
+    MODELS_TO_TRY = [
+        "gemini-1.5-flash",
+        "gemini-1.5-flash-001",
+        "gemini-1.5-flash-002",
+        "gemini-1.5-flash-8b",
+        "gemini-1.5-flash-8b-001",
+        "gemini-1.5-pro",
+        "gemini-1.5-pro-001",
+        "gemini-1.5-pro-002",
+    ]
+    for model in MODELS_TO_TRY:
+        try:
+            genai.GenerativeModel(model).generate_content("test")
+            return model
+        except:
+            continue
+    return "gemini-2.0-flash"
 
 SELECTED_MODEL = get_available_model()
 
