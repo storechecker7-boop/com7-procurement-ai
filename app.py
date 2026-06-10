@@ -20,23 +20,7 @@ def get_ai_response(prompt, model_name):
 
 @st.cache_resource
 def get_available_model():
-    MODELS_TO_TRY = [
-        "gemini-1.5-flash",
-        "gemini-1.5-flash-001",
-        "gemini-1.5-flash-002",
-        "gemini-1.5-flash-8b",
-        "gemini-1.5-flash-8b-001",
-        "gemini-1.5-pro",
-        "gemini-1.5-pro-001",
-        "gemini-1.5-pro-002",
-    ]
-    for model in MODELS_TO_TRY:
-        try:
-            genai.GenerativeModel(model).generate_content("test")
-            return model
-        except:
-            continue
-    return "gemini-2.0-flash"
+    return "gemini-1.5-flash-002"
 
 SELECTED_MODEL = get_available_model()
 
@@ -56,7 +40,6 @@ st.set_page_config(page_title="SPECIFICATION COM7", layout="centered", page_icon
 
 st.markdown("""
     <style>
-    /* ตั้งค่าฟอนต์และการแสดงผลให้ดูมินิมอลและเรียบหรูขึ้น */
     @import url('https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600&display=swap');
     
     html, body, [class*="css"]  {
@@ -68,11 +51,9 @@ st.markdown("""
     .quota-box { text-align: center; background-color: #f1f8e9; color: #558b2f; padding: 6px 15px; border-radius: 20px; font-weight: 400; font-size: 0.85rem; margin-bottom: 30px; border: 1px solid #dcedc8; display: inline-block; width: 100%;}
     .history-box { background-color: #f9f9f9; border: 1px dashed #ccc; border-radius: 8px; padding: 15px; margin-bottom: 20px; text-align: center; color: #999; font-size: 0.9rem;}
     
-    /* ปุ่มค้นหา */
     .stButton>button { background-color: #7CB342 !important; color: white !important; border-radius: 8px; border: none; font-weight: 500; padding: 10px 24px; transition: all 0.3s ease;}
     .stButton>button:hover { background-color: #689f38 !important; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
     
-    /* หัวข้อผลลัพธ์แบบเรียบหรู */
     .result-header {
         font-size: 1.25rem;
         font-weight: 500;
@@ -89,7 +70,6 @@ st.markdown("""
         margin-left: 8px;
     }
     
-    /* สถานะโหลดแบบคลีนๆ */
     .clean-loading {
         text-align: center;
         color: #7CB342;
@@ -164,7 +144,6 @@ if search_btn or st.session_state.trigger_search:
         st.session_state.search_history.append(product_name)
         st.session_state.search_history = st.session_state.search_history[-10:]
         
-        # กล่องโหลดข้อความแบบเรียบหรู (จะถูกลบทิ้งเมื่อโหลดเสร็จ)
         loading_placeholder = st.empty()
         loading_placeholder.markdown(f"<div class='clean-loading'>⏳ กำลังรวบรวมข้อมูลซัพพลายเออร์สำหรับ '{product_name}'...</div>", unsafe_allow_html=True)
             
@@ -198,7 +177,6 @@ if search_btn or st.session_state.trigger_search:
                 else:
                     data = []
 
-            # ลบกล่องโหลดทิ้งเมื่อประมวลผลเสร็จ
             loading_placeholder.empty()
 
             if not data:
@@ -224,8 +202,6 @@ if search_btn or st.session_state.trigger_search:
                     st.warning(f"ค้นพบข้อมูลบริษัท แต่ไม่มีบริษัทไหนที่มีข้อมูลอีเมลติดต่อเลยสำหรับ '{product_name}'")
                 else:
                     df = pd.DataFrame(final_rows)
-
-                    # แสดงผลหัวข้อแบบเรียบหรูและเล็กลง
                     st.markdown(f"<div class='result-header'>✅ ผลลัพธ์สำหรับ: {product_name} <span class='result-count'>(พบ {len(df)} รายการที่ระบุอีเมล)</span></div>", unsafe_allow_html=True)
                     st.dataframe(
                         df,
@@ -235,12 +211,8 @@ if search_btn or st.session_state.trigger_search:
                 
         except Exception as e:
             loading_placeholder.empty()
-            error_msg = str(e)
-            if "not found" in error_msg or "not supported" in error_msg:
-                st.error(f"Model ไม่รองรับ: {SELECTED_MODEL} — กรุณาแจ้งผู้ดูแลระบบ")
-            else:
-        st.error(f"เกิดข้อผิดพลาดในการดึงข้อมูล: {e}")
-    app_quota['used'] = max(0, app_quota['used'] - 1)
+            st.error(f"เกิดข้อผิดพลาดในการดึงข้อมูล: {e}")
+            app_quota['used'] = max(0, app_quota['used'] - 1)
 
 st.markdown("---")
 st.caption(f"⚙️ System Engine: {SELECTED_MODEL} (Auto-reset every 1 hour)")
