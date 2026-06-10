@@ -8,7 +8,10 @@ import re
 # ==========================================
 # 1. ตั้งค่าระบบและจัดการ Cache
 # ==========================================
-client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
+client = genai.Client(
+    api_key=st.secrets["GEMINI_API_KEY"],
+    http_options={"api_version": "v1"}
+)
 
 @st.cache_data(ttl=3600)
 def get_ai_response(prompt, model_name):
@@ -44,51 +47,17 @@ st.set_page_config(page_title="SPECIFICATION COM7", layout="centered", page_icon
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600&display=swap');
-    
-    html, body, [class*="css"]  {
-        font-family: 'Kanit', sans-serif;
-    }
-    
+    html, body, [class*="css"] { font-family: 'Kanit', sans-serif; }
     .main-title { text-align: center; color: #7CB342; font-size: 2.8rem; font-weight: 600; margin-bottom: 0; letter-spacing: 1px;}
     .sub-title { text-align: center; color: #888; font-size: 0.95rem; margin-bottom: 25px; font-weight: 300; }
     .quota-box { text-align: center; background-color: #f1f8e9; color: #558b2f; padding: 6px 15px; border-radius: 20px; font-weight: 400; font-size: 0.85rem; margin-bottom: 30px; border: 1px solid #dcedc8; display: inline-block; width: 100%;}
     .history-box { background-color: #f9f9f9; border: 1px dashed #ccc; border-radius: 8px; padding: 15px; margin-bottom: 20px; text-align: center; color: #999; font-size: 0.9rem;}
-    
     .stButton>button { background-color: #7CB342 !important; color: white !important; border-radius: 8px; border: none; font-weight: 500; padding: 10px 24px; transition: all 0.3s ease;}
     .stButton>button:hover { background-color: #689f38 !important; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-    
-    .result-header {
-        font-size: 1.25rem;
-        font-weight: 500;
-        color: #2e7d32;
-        padding-bottom: 10px;
-        border-bottom: 1px solid #e0e0e0;
-        margin-top: 30px;
-        margin-bottom: 15px;
-    }
-    .result-count {
-        font-size: 0.9rem;
-        font-weight: 300;
-        color: #777;
-        margin-left: 8px;
-    }
-    
-    .clean-loading {
-        text-align: center;
-        color: #7CB342;
-        font-size: 0.95rem;
-        font-weight: 400;
-        padding: 20px;
-        background-color: #f1f8e9;
-        border-radius: 8px;
-        margin-top: 15px;
-        animation: pulse 1.5s infinite;
-    }
-    @keyframes pulse {
-        0% { opacity: 0.6; }
-        50% { opacity: 1; }
-        100% { opacity: 0.6; }
-    }
+    .result-header { font-size: 1.25rem; font-weight: 500; color: #2e7d32; padding-bottom: 10px; border-bottom: 1px solid #e0e0e0; margin-top: 30px; margin-bottom: 15px; }
+    .result-count { font-size: 0.9rem; font-weight: 300; color: #777; margin-left: 8px; }
+    .clean-loading { text-align: center; color: #7CB342; font-size: 0.95rem; font-weight: 400; padding: 20px; background-color: #f1f8e9; border-radius: 8px; margin-top: 15px; animation: pulse 1.5s infinite; }
+    @keyframes pulse { 0% { opacity: 0.6; } 50% { opacity: 1; } 100% { opacity: 0.6; } }
     </style>
 """, unsafe_allow_html=True)
 
@@ -106,7 +75,6 @@ def click_history(term):
     st.session_state.search_query = term
     st.session_state.trigger_search = True
 
-# Header & Quota Display
 st.markdown("<div class='main-title'>COIII7</div>", unsafe_allow_html=True)
 st.markdown("<div class='sub-title'>SPECIFICATION COM7 | B2B PROCUREMENT AGENT</div>", unsafe_allow_html=True)
 st.markdown(f"<div class='quota-box'>📊 โควต้าการค้นหารวมของระบบวันนี้: {app_quota['used']} / {app_quota['limit']} ครั้ง</div>", unsafe_allow_html=True)
@@ -141,15 +109,15 @@ if search_btn or st.session_state.trigger_search:
         app_quota['used'] += 1
         st.session_state.trigger_search = False
         st.session_state.search_query = product_name
-        
+
         if product_name in st.session_state.search_history:
             st.session_state.search_history.remove(product_name)
         st.session_state.search_history.append(product_name)
         st.session_state.search_history = st.session_state.search_history[-10:]
-        
+
         loading_placeholder = st.empty()
         loading_placeholder.markdown(f"<div class='clean-loading'>⏳ กำลังรวบรวมข้อมูลซัพพลายเออร์สำหรับ '{product_name}'...</div>", unsafe_allow_html=True)
-            
+
         prompt = f"""
         ค้นหาบริษัท B2B ในไทยที่ขาย '{product_name}' ให้ได้จำนวนมากที่สุดเท่าที่คุณจะสามารถประมวลผลได้ (เป้าหมาย 30-50 แห่งขึ้นไป) (ห้ามบริษัทค้าปลีกเด็ดขาด)
         เลือกมาเฉพาะบริษัทที่มีข้อมูล 'อีเมล' สำหรับติดต่อเท่านั้น ถ้าไม่มีให้ข้ามไปเลย
@@ -166,7 +134,7 @@ if search_btn or st.session_state.trigger_search:
 
         try:
             response_text = get_ai_response(prompt, SELECTED_MODEL)
-            
+
             try:
                 data = json.loads(response_text)
             except json.JSONDecodeError:
@@ -183,35 +151,28 @@ if search_btn or st.session_state.trigger_search:
             loading_placeholder.empty()
 
             if not data:
-                st.info(f"ไม่พบข้อมูลซัพพลายเออร์ B2B ที่มีอีเมลติดต่อสำหรับ '{product_name}' หรือระบบคืนค่าผิดพลาด กรุณาลองปรับคำค้นหาใหม่")
+                st.info(f"ไม่พบข้อมูลซัพพลายเออร์ B2B ที่มีอีเมลติดต่อสำหรับ '{product_name}' กรุณาลองปรับคำค้นหาใหม่")
             else:
                 df_raw = pd.DataFrame(data)
-                
                 final_rows = []
                 for _, row in df_raw.iterrows():
                     email = str(row.get('email', '')).strip()
                     if email.upper() == 'N/A' or email == '-' or email == '' or email.lower() == 'nan':
                         continue
-
-                    row_data = {
+                    final_rows.append({
                         "ชื่อซัพพลายเออร์": row.get('name', 'N/A'),
                         "เวลาเปิด-ปิด": row.get('hours', 'N/A'),
                         "อีเมล": email,
                         "เบอร์โทรศัพท์": row.get('phone', 'N/A')
-                    }
-                    final_rows.append(row_data)
+                    })
 
                 if not final_rows:
                     st.warning(f"ค้นพบข้อมูลบริษัท แต่ไม่มีบริษัทไหนที่มีข้อมูลอีเมลติดต่อเลยสำหรับ '{product_name}'")
                 else:
                     df = pd.DataFrame(final_rows)
                     st.markdown(f"<div class='result-header'>✅ ผลลัพธ์สำหรับ: {product_name} <span class='result-count'>(พบ {len(df)} รายการที่ระบุอีเมล)</span></div>", unsafe_allow_html=True)
-                    st.dataframe(
-                        df,
-                        hide_index=True,
-                        use_container_width=True
-                    )
-                
+                    st.dataframe(df, hide_index=True, use_container_width=True)
+
         except Exception as e:
             loading_placeholder.empty()
             st.error(f"เกิดข้อผิดพลาดในการดึงข้อมูล: {e}")
