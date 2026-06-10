@@ -1,5 +1,6 @@
 import streamlit as st
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 import pandas as pd
 import json
 import re
@@ -7,16 +8,18 @@ import re
 # ==========================================
 # 1. ตั้งค่าระบบและจัดการ Cache
 # ==========================================
-GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
-genai.configure(api_key=GEMINI_API_KEY, transport="rest")
+client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
 
 @st.cache_data(ttl=3600)
 def get_ai_response(prompt, model_name):
-    model = genai.GenerativeModel(model_name)
-    return model.generate_content(
-        prompt,
-        generation_config={"response_mime_type": "application/json"}
+    response = client.models.generate_content(
+        model=model_name,
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            response_mime_type="application/json"
+        )
     )
+    return response.text
 
 @st.cache_resource
 def get_available_model():
@@ -162,12 +165,12 @@ if search_btn or st.session_state.trigger_search:
         """
 
         try:
-            response = get_ai_response(prompt, SELECTED_MODEL)
+            response_text = get_ai_response(prompt, SELECTED_MODEL)
             
             try:
-                data = json.loads(response.text)
+                data = json.loads(response_text)
             except json.JSONDecodeError:
-                match = re.search(r'\[.*\]', response.text, re.DOTALL)
+                match = re.search(r'\[.*\]', response_text, re.DOTALL)
                 if match:
                     fixed_json_str = match.group(0).rsplit('}', 1)[0] + '}]'
                     try:
