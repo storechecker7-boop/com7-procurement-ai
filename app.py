@@ -235,8 +235,12 @@ if search_btn or st.session_state.trigger_search:
                 
         except Exception as e:
             loading_placeholder.empty()
-            st.error(f"เกิดข้อผิดพลาดในการดึงข้อมูล: {e}")
-            app_quota['used'] = max(0, app_quota['used'] - 1)
+            error_msg = str(e)
+            if "not found" in error_msg or "not supported" in error_msg:
+                st.error(f"Model ไม่รองรับ: {SELECTED_MODEL} — กรุณาแจ้งผู้ดูแลระบบ")
+            else:
+        st.error(f"เกิดข้อผิดพลาดในการดึงข้อมูล: {e}")
+    app_quota['used'] = max(0, app_quota['used'] - 1)
 
 st.markdown("---")
 st.caption(f"⚙️ System Engine: {SELECTED_MODEL} (Auto-reset every 1 hour)")
